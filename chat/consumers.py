@@ -3,13 +3,13 @@ from channels.generic.websocket import WebsocketConsumer
 import json
 from chat.models import Message
 from django.contrib.auth import get_user_model
-
+from .views import get_last_10_messages, get_user_contact,get_current_chat
 User = get_user_model()
 
 
 class ChatConsumer(WebsocketConsumer):
     def fetch_messages(self, data):
-        messages = Message.last_10_messages()
+        messages = get_last_10_messages(data['chatId'])
         content = {
 	    'command': 'messages',
             'messages': self.messages_to_json(messages)
@@ -17,9 +17,11 @@ class ChatConsumer(WebsocketConsumer):
         self.send_chat_message(content)
 
     def new_message(self, data):
-        creator = data['from']
-        creator_user = User.objects.filter(username=creator)[0]
-        message = Message.objects.create(creator=creator_user, message=data['message'])
+        user_contact = get_user_contact(data['from'])
+        message = Message.objects.create(contact=user_contact, message=data['message'])
+        current_chat = get_current_chat(data['chatId'])
+        current_chat.messages.add(message)
+        current_chat.save()
         content = {
             'command':'new_message',
             'message':self.message_to_json(message)
@@ -35,7 +37,7 @@ class ChatConsumer(WebsocketConsumer):
     def message_to_json(self, message):
         return {
             'id'     : message.id,
-            'creator': message.creator.username,
+            'creator': message.contact.user.username,
             'message': message.message,
             'timestamp': str(message.timestamp)
         }
